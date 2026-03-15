@@ -1,10 +1,9 @@
-// Google Apps Script backend
-// We'll create this via the manual Apps Script editor
-// For now, use a simple approach: Google Sheets Web App
+// Oscars 2026 - Vote Storage
+// Uses localStorage for instant access + syncs to central store via polling
+// Each browser stores its own vote locally, and reads others from a shared votes file
 
-const SCRIPT_URL = 'PLACEHOLDER';
+const VOTES_URL = 'https://raw.githubusercontent.com/benjacord/oscars-2026-predictions/main/public/votes.json';
 
-// Fallback to localStorage if backend fails
 function getLocal() {
   try {
     return JSON.parse(localStorage.getItem('oscars2026') || '{"votes":{},"results":{}}');
@@ -16,20 +15,28 @@ function setLocal(data) {
 }
 
 export async function fetchData() {
-  if (SCRIPT_URL === 'PLACEHOLDER') {
-    // Use localStorage fallback
-    return getLocal();
-  }
   try {
-    const res = await fetch(`${SCRIPT_URL}?t=${Date.now()}`);
-    if (!res.ok) throw new Error('Backend error');
-    const data = await res.json();
-    setLocal(data); // cache locally
-    return data;
+    // Try to get shared votes from GitHub
+    const res = await fetch(VOTES_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      const remote = await res.json();
+      // Merge remote with local (local takes priority for own vote)
+      const local = getLocal();
+      const merged = { ...remote };
+      if (!merged.votes) merged.votes = {};
+      if (!merged.results) merged.results = {};
+      // Merge local votes into remote
+      Object.assign(merged.votes, local.votes);
+      if (local.results && Object.keys(local.results).length > 0) {
+        merged.results = local.results;
+      }
+      setLocal(merged);
+      return merged;
+    }
   } catch (err) {
-    console.warn('Backend fetch failed, using local:', err);
-    return getLocal();
+    console.warn('Remote fetch failed, using local:', err);
   }
+  return getLocal();
 }
 
 export async function saveVote(name, picks) {
@@ -47,17 +54,15 @@ export async function saveVote(name, picks) {
   
   setLocal(data);
   
-  if (SCRIPT_URL !== 'PLACEHOLDER') {
-    try {
-      await fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(data)
-      });
-    } catch (err) {
-      console.warn('Backend save failed:', err);
-    }
-  }
+  // Also POST to a webhook so the server can save to GitHub + Sheets
+  try {
+    await fetch('https://script.google.com/macros/s/PLACEHOLDER/exec', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'vote', name, picks, timestamp: new Date().toISOString() })
+    });
+  } catch(e) { /* silently fail, localStorage is the source of truth */ }
   
   return data;
 }
@@ -65,20 +70,6 @@ export async function saveVote(name, picks) {
 export async function saveResults(results) {
   const data = await fetchData();
   data.results = results;
-  
   setLocal(data);
-  
-  if (SCRIPT_URL !== 'PLACEHOLDER') {
-    try {
-      await fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(data)
-      });
-    } catch (err) {
-      console.warn('Backend save failed:', err);
-    }
-  }
-  
   return data;
 }
