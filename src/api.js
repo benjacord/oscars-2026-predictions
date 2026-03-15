@@ -1,17 +1,15 @@
 // Oscars 2026 - Central Backend
-const API_URL = 'https://lucky-keys-eat.loca.lt';
+const API_URL = 'https://bradford-everybody-effects-side.trycloudflare.com';
 
 export async function fetchData() {
   try {
-    const res = await fetch(API_URL, {
-      headers: { 'bypass-tunnel-reminder': 'true' },
-      cache: 'no-store'
-    });
+    const res = await fetch(API_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error('Backend error');
-    return await res.json();
+    const data = await res.json();
+    localStorage.setItem('oscars2026', JSON.stringify(data));
+    return data;
   } catch (err) {
     console.warn('Backend fetch failed:', err);
-    // Fallback to localStorage
     try {
       return JSON.parse(localStorage.getItem('oscars2026') || '{"votes":{},"results":{}}');
     } catch { return { votes: {}, results: {} }; }
@@ -23,10 +21,7 @@ export async function saveVote(name, picks) {
   
   const res = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'bypass-tunnel-reminder': 'true'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'vote', name, picks, timestamp })
   });
   
@@ -37,7 +32,6 @@ export async function saveVote(name, picks) {
   }
   
   const result = await res.json();
-  // Also save locally as backup
   localStorage.setItem('oscars2026', JSON.stringify(result.data));
   return result.data;
 }
@@ -45,10 +39,7 @@ export async function saveVote(name, picks) {
 export async function saveResults(results) {
   const res = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'bypass-tunnel-reminder': 'true'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'results', results })
   });
   
