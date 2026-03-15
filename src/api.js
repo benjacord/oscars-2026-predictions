@@ -1,75 +1,57 @@
-// Oscars 2026 - Vote Storage
-// Uses localStorage for instant access + syncs to central store via polling
-// Each browser stores its own vote locally, and reads others from a shared votes file
-
-const VOTES_URL = 'https://raw.githubusercontent.com/benjacord/oscars-2026-predictions/main/public/votes.json';
-
-function getLocal() {
-  try {
-    return JSON.parse(localStorage.getItem('oscars2026') || '{"votes":{},"results":{}}');
-  } catch { return { votes: {}, results: {} }; }
-}
-
-function setLocal(data) {
-  localStorage.setItem('oscars2026', JSON.stringify(data));
-}
+// Oscars 2026 - Central Backend
+const API_URL = 'https://lucky-keys-eat.loca.lt';
 
 export async function fetchData() {
   try {
-    // Try to get shared votes from GitHub
-    const res = await fetch(VOTES_URL + '?t=' + Date.now(), { cache: 'no-store' });
-    if (res.ok) {
-      const remote = await res.json();
-      // Merge remote with local (local takes priority for own vote)
-      const local = getLocal();
-      const merged = { ...remote };
-      if (!merged.votes) merged.votes = {};
-      if (!merged.results) merged.results = {};
-      // Merge local votes into remote
-      Object.assign(merged.votes, local.votes);
-      if (local.results && Object.keys(local.results).length > 0) {
-        merged.results = local.results;
-      }
-      setLocal(merged);
-      return merged;
-    }
+    const res = await fetch(API_URL, {
+      headers: { 'bypass-tunnel-reminder': 'true' },
+      cache: 'no-store'
+    });
+    if (!res.ok) throw new Error('Backend error');
+    return await res.json();
   } catch (err) {
-    console.warn('Remote fetch failed, using local:', err);
+    console.warn('Backend fetch failed:', err);
+    // Fallback to localStorage
+    try {
+      return JSON.parse(localStorage.getItem('oscars2026') || '{"votes":{},"results":{}}');
+    } catch { return { votes: {}, results: {} }; }
   }
-  return getLocal();
 }
 
 export async function saveVote(name, picks) {
-  const data = await fetchData();
+  const timestamp = new Date().toISOString();
   
-  if (data.votes[name]) {
-    throw new Error('YA_VOTO');
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'bypass-tunnel-reminder': 'true'
+    },
+    body: JSON.stringify({ action: 'vote', name, picks, timestamp })
+  });
+  
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (err.error === 'YA_VOTO') throw new Error('YA_VOTO');
+    throw new Error('Error guardando voto');
   }
   
-  data.votes[name] = {
-    name,
-    timestamp: new Date().toISOString(),
-    picks
-  };
-  
-  setLocal(data);
-  
-  // Also POST to a webhook so the server can save to GitHub + Sheets
-  try {
-    await fetch('https://script.google.com/macros/s/PLACEHOLDER/exec', {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'vote', name, picks, timestamp: new Date().toISOString() })
-    });
-  } catch(e) { /* silently fail, localStorage is the source of truth */ }
-  
-  return data;
+  const result = await res.json();
+  // Also save locally as backup
+  localStorage.setItem('oscars2026', JSON.stringify(result.data));
+  return result.data;
 }
 
 export async function saveResults(results) {
-  const data = await fetchData();
-  data.results = results;
-  setLocal(data);
-  return data;
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'bypass-tunnel-reminder': 'true'
+    },
+    body: JSON.stringify({ action: 'results', results })
+  });
+  
+  if (!res.ok) throw new Error('Error guardando resultados');
+  return await res.json();
 }
