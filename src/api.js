@@ -26,8 +26,6 @@ export async function saveVote(name, picks) {
   });
   
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    if (err.error === 'YA_VOTO') throw new Error('YA_VOTO');
     throw new Error('Error guardando voto');
   }
   

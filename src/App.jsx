@@ -457,13 +457,7 @@ export default function App() {
         <Lobby
           voters={existingNames}
           userName={userName}
-          onVote={() => {
-            if (hasVoted) {
-              alert('Ya votaste! Tu voto está sellado 🔒');
-            } else {
-              setScreen('voting');
-            }
-          }}
+          onVote={() => setScreen('voting')}
           onResults={async () => {
             await loadData();
             setScreen('results');
