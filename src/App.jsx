@@ -382,14 +382,7 @@ export default function App() {
     }
   }, [screen, loadData]);
 
-  // Check localStorage for returning user
-  useEffect(() => {
-    const saved = localStorage.getItem('oscar2026_user');
-    if (saved) {
-      setUserName(saved);
-      setScreen('lobby');
-    }
-  }, []);
+  // Always start fresh - no auto-login
 
   const existingNames = Object.keys(data.votes || {});
 
